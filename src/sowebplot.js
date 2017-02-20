@@ -139,31 +139,11 @@ class R2toRPlot extends PlotDefinition {
 }
 
 /**
- * Abstract class. Provides the GL geometry and shader for drawing a certain plot.
+ * Abstract class. Provides the GL geometry and shader for drawing a certain object.
  */
-class PlotGraphics {
+class GraphicsObject {
     /**
-     * Creates a new PlotGraphics object.
-     * @throws TypeError def was not a PlotDefinition object.
-     */
-    constructor(def) {
-        if (!(def instanceof PlotDefinition))
-            throw new ReferenceError("def is not a PlotDefinition.");
-        this._def = def;
-    }
-
-    get def() { return this._def; }
-
-    /**
-     * Called when the associated definition is updated. Can be overriden to check when stuff
-     * needs to be invalidated.
-     */
-    defWasUpdated(fn, ctx) {
-
-    }
-
-    /**
-     * (Re-)create the shader that will be used to render the plot.
+     * (Re-)create the shader that will be used to render the object.
      * 
      * @param gl The WebGL context.
      * @returns true if a new shader was allocated.
@@ -173,7 +153,7 @@ class PlotGraphics {
     }
 
     /**
-     * (Re-)build the geometry that will be used to render the plot.
+     * (Re-)build the geometry that will be used to render the object.
      * 
      * Must be called before any call to buildBuffers.
      * 
@@ -236,9 +216,12 @@ class PlotGraphics {
     }
 }
 
-class R2toRPlotGraphics extends PlotGraphics {
+class R2toRGraphicsObject extends GraphicsObject {
     constructor(def) {
-        super(def);
+        super();
+        if (!(def instanceof PlotDefinition)) 
+            throw new TypeError("Expected object of type PlotDefinition.");
+        this._def = def;
         this._program = null;
         this._buffers = null;
     }
@@ -318,11 +301,11 @@ class R2toRPlotGraphics extends PlotGraphics {
             let pos_y = bounds.min[1] + Y_STEP * y;
             for (let x = 0; x < VERTICES_SQRT; x++) {
                 let pos_x = bounds.min[0] + X_STEP * x;
-                let pos_z = this.def.fn.evalAt(pos_x, pos_y);
+                let pos_z = this._def.fn.evalAt(pos_x, pos_y);
                 
                 geo.value.data.push(pos_z);
 
-                let grad = this.def.fn.gradientAt(pos_x, pos_y);
+                let grad = this._def.fn.gradientAt(pos_x, pos_y);
                 let N = [grad.at(0), grad.at(1), -1];
                 let N_norm = 1.0/Math.sqrt(N[0]*N[0] + N[1]*N[1] + 1);
                 N[0] *= N_norm;
@@ -437,30 +420,30 @@ class WebGLRenderer {
         if (!(gl instanceof WebGLRenderingContext))
             throw new TypeError("gl must be a WebGLRenderingContext");
         this._gl = gl;
-        this._plotGraphics = [];
-        this._plotGraphicsInvalidated = true;
+        this._objects = [];
+        this._objectsInvalidated = true;
     }
 
-    registerPlotGraphics(gfx) {
-        if (!(gfx instanceof PlotGraphics))
-            throw new TypeError("Expected instance of PlotGraphics.");
-        this._plotGraphics.push(gfx);
+    registerGraphicsObject(gfx) {
+        if (!(gfx instanceof GraphicsObject))
+            throw new TypeError("Expected instance of GraphicsObject.");
+        this._objects.push(gfx);
     }
 
-    unregisterPlotGraphics(def) {
-        let idx = this._plotGraphics.findIndex((v, i, o) => v.def === def);
+    unregisterGraphicsObject(def) {
+        let idx = this._objects.findIndex((v, i, o) => v.def === def);
         if (idx === -1)
-            throw new Error("Bug! unregister called for a PlotGraphics object not previously registered.");
+            throw new Error("Bug! unregister called for a GraphicsObject object not previously registered.");
         
-        let res = this._plotGraphics[idx];
+        let res = this._objects[idx];
 
         if (res != null)
             res.cleanUp(this._gl);
-        this._plotGraphics.splice(idx, 1);
+        this._objects.splice(idx, 1);
     }
 
     reinitGraphics(gl, time, bounds) {
-        for (let gfx of this._plotGraphics) {
+        for (let gfx of this._objects) {
             gfx.buildBuffers(gl, bounds, {});
             gfx.buildShader(gl);
         }
@@ -473,9 +456,9 @@ class WebGLRenderer {
     render(time, bounds, camera) {
         let gl = this._gl;
 
-        if (this._plotGraphicsInvalidated) {
+        if (this._objectsInvalidated) {
             this.reinitGraphics(gl, time, bounds);
-            this._plotGraphicsInvalidated = false;
+            this._objectsInvalidated = false;
         }
 
         gl.enable(gl.SAMPLE_COVERAGE);
@@ -491,7 +474,7 @@ class WebGLRenderer {
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
-        for (let gfx of this._plotGraphics)
+        for (let gfx of this._objects)
         {
             gfx.bindShader(gl);
             gfx.bindBuffers(gl);

@@ -21,10 +21,10 @@
                 let plot1 = new R2toRPlot(new RealValuedFunction(["x", "y"], "Math.cos(5 * x) * 2 - Math.sin(3 * y)"));
                 let plot2 = new R2toRPlot(new RealValuedFunction(["x", "y"], "Math.cos(2 * x) * 2 - Math.sin(5 * y)"));
                 
-                let gfx1 = new R2toRPlotGraphics(plot1);
-                let gfx2 = new R2toRPlotGraphics(plot2);
-                plotter.renderer.registerPlotGraphics(gfx1);
-                plotter.renderer.registerPlotGraphics(gfx2);
+                let gfx1 = new R2toRGraphicsObject(plot1);
+                let gfx2 = new R2toRGraphicsObject(plot2);
+                plotter.renderer.registerGraphicsObject(gfx1);
+                plotter.renderer.registerGraphicsObject(gfx2);
 
                 plotter.loop();
             });            
