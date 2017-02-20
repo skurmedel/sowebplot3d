@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * Represents a vector in R^n. 
  */
@@ -249,16 +251,19 @@ class R2toRPlotGraphics extends PlotGraphics {
                 [
                     // Vertex.
                     `
-                    attribute vec3 position;
-                    attribute vec3 normal;
+                    attribute vec3  position;
+                    attribute vec3  normal;
                     attribute float value;
-                    varying vec3 vNormal;
-                    varying vec3 vPosition;
-                    varying float vValue;
-                    varying vec3 vEye;
-                    uniform mat4 view;
-                    uniform mat4 model;
-                    uniform mat4 proj;
+                   
+                    uniform mat4    view;
+                    uniform mat4    model;
+                    uniform mat4    proj;
+
+                    varying vec3    vNormal;
+                    varying vec3    vPosition;
+                    varying float   vValue;
+                    varying vec3    vEye;
+
                     void main() {
                         vEye = (view * model * vec4(0, 0, -1, 1)).xyz;
                         gl_Position = proj * view * model * vec4(position, 1);
@@ -269,14 +274,18 @@ class R2toRPlotGraphics extends PlotGraphics {
                     `
                     #extension GL_OES_standard_derivatives : enable
                     precision mediump float;
-                    varying vec3 vPosition;
-                    varying vec3 vNormal;
-                    varying float vValue;
-                    varying vec3 vEye;
-                    uniform vec3 boundsMin;
-                    uniform vec3 boundsMax;
+                    
                     const vec3 COLOUR_MIN = vec3(0.043, 0.475, 0.576);
                     const vec3 COLOUR_MAX = vec3(0.933, 0.486, 0.047);
+
+                    uniform vec3 boundsMin;
+                    uniform vec3 boundsMax;
+                                        
+                    varying vec3    vNormal;
+                    varying vec3    vPosition;
+                    varying float   vValue;
+                    varying vec3    vEye;
+                    
                     void main() { 
                         vec3 N = normalize(vNormal); vec3 I = normalize(vEye);
                         float ywidth = abs(boundsMax.y - boundsMin.y);
@@ -418,15 +427,17 @@ class WebGLRenderer {
         if (this._plotGraphicsInvalidated) {
             this.reinitGraphics(gl, time, bounds);
             this._plotGraphicsInvalidated = false;
-        }        
+        }
 
+        gl.enable(gl.SAMPLE_COVERAGE);
+        
         // Assume these things have been touched previously.
         gl.clearColor(0, 0, 0, 1);
         gl.frontFace(gl.CCW);
         //gl.disable(gl.CULL_FACE);              
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(gl.LEQUAL);
-
+        
         twgl.resizeCanvasToDisplaySize(gl.canvas);
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
@@ -463,19 +474,28 @@ class SoWebPlotter{
             Install canvas and get webgl context.
         */
         this._parent = document.getElementById(elementId);
-        if (this._parent == undefined || this._parent == null)
+        if (this._parent == undefined)
             throw new Error("Couldn't locate the element.");
         
         this._canvas = document.createElement("canvas");
+        if (this._canvas == null)
+            throw new Error("Couldn't create canvas.");
         this._canvas.width = this._parent.clientWidth;
         this._canvas.height = this._parent.clientHeight;
 
         /*
             Now we create the webgl context, if it isn't around, we die.
         */
-        this._glCtx = this._canvas.getContext("webgl", {stencil:true});
-        if (this._glCtx == null || this._glCtx == undefined)
-            throw new Error("WebGL not supported.");
+        this._glCtx = this._canvas.getContext("webgl", {depth: true, antialias:true, alpha:true});
+        if (this._glCtx == null)
+        {
+            /*
+                Try with experimental instead.
+            */
+            this._glCtx = this._canvas.getContext("experimental-webgl", {depth: true, antialias: true, alpha:true});
+            if (this._glCtx == null)
+                throw new Error("WebGL not supported.");
+        }
 
         /*
             Add us last so we don't have to clean up if the prior checks fail.
