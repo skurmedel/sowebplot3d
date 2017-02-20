@@ -383,6 +383,9 @@ class R2toRPlotGraphics extends PlotGraphics {
     }
 }
 
+/**
+ * Implements a camera with ortographic projection.
+ */
 class OrthographicCamera {
     constructor() {
         this._viewMatrix = twgl.m4.identity();
@@ -404,6 +407,12 @@ class OrthographicCamera {
         return this;
     }
 
+    /**
+     * Gets the camera's view matrix, transforms world space to camera space.
+     * 
+     * @param time The time passed since the last render.
+     * @returns A twgl.m4 instance.
+     */
     getViewMatrix(time) {
         if (this._invalidated = true) {
             let view = twgl.m4.lookAt(this._pos, this._trg, twgl.v3.create(0, 1, 0));
@@ -412,6 +421,12 @@ class OrthographicCamera {
         return this._viewMatrix;
     }
 
+    /**
+     * Gets the camera's projection matrix, transforms camera space to projection space.
+     * 
+     * @param time The time passed since the last render.
+     * @returns A twgl.m4 instance.
+     */
     getProjMatrix(time) {
         return this._projMatrix;
     }
