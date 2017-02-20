@@ -383,6 +383,40 @@ class R2toRPlotGraphics extends PlotGraphics {
     }
 }
 
+class OrthographicCamera {
+    constructor() {
+        this._viewMatrix = twgl.m4.identity();
+        this._projMatrix = twgl.m4.ortho(-2, 2, -2, 2, 0.01, 100);
+        this._invalidated = true;
+        this._pos = twgl.v3.create(0, 0, 0);
+        this._trg = twgl.v3.create(0, 0, -1);
+    }
+
+    setPosition(x, y, z) { 
+        this._pos = twgl.v3.create(x, y, z); 
+        this._invalidated = true;
+        return this;
+    }
+
+    setTarget(x, y, z) { 
+        this._trg = twgl.v3.create(x, y, z); 
+        this._invalidated = true;
+        return this;
+    }
+
+    getViewMatrix(time) {
+        if (this._invalidated = true) {
+            let view = twgl.m4.lookAt(this._pos, this._trg, twgl.v3.create(0, 1, 0));
+            this._viewMatrix = twgl.m4.inverse(view);
+        }
+        return this._viewMatrix;
+    }
+
+    getProjMatrix(time) {
+        return this._projMatrix;
+    }
+}
+
 class WebGLRenderer {
     constructor(gl) {
         if (!(gl instanceof WebGLRenderingContext))
@@ -421,7 +455,7 @@ class WebGLRenderer {
         this._gl.getExtension("OES_standard_derivatives");
     }
 
-    render(time, bounds) {
+    render(time, bounds, camera) {
         let gl = this._gl;
 
         if (this._plotGraphicsInvalidated) {
@@ -442,23 +476,11 @@ class WebGLRenderer {
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
-        function calculateProjMat() {
-            let projMat = twgl.m4.ortho(-2, 2, -2, 2, 0.01, 100);
-            return projMat;
-        }
-
-        function calculateViewMat() {
-            let pos = twgl.v3.create(1, 1, 1);
-            let move = twgl.m4.lookAt(pos, twgl.v3.create(0, 0, 0), twgl.v3.create(0, 1, 0));
-            return twgl.m4.inverse(move);
-            //return twgl.m4.identity();
-        }
-
         for (let gfx of this._plotGraphics)
         {
             gfx.bindShader(gl);
             gfx.bindBuffers(gl);
-            gfx.setUniforms(gl, time, calculateViewMat(), calculateProjMat(), bounds);
+            gfx.setUniforms(gl, time, camera.getViewMatrix(time), camera.getProjMatrix(time), bounds);
             gfx.drawBuffers(gl);
         }
     }
@@ -505,8 +527,9 @@ class SoWebPlotter{
         this._renderer = new WebGLRenderer(this._glCtx);
         this._renderer.init();
 
-
         this._animationRequest = null;
+
+        this._camera = new OrthographicCamera();
         //console.info("sowebplot|Supported extensions follows: " + this._glCtx.getSupportedExtensions().join("\n"));
     }
 
@@ -524,7 +547,7 @@ class SoWebPlotter{
 
         let me = this;
         function callRender(time) {
-            me.renderer.render(time, bounds);
+            me.renderer.render(time, bounds, me.camera);
             me._animationRequest = requestAnimationFrame(callRender);
         }
         requestAnimationFrame(callRender);
@@ -538,6 +561,10 @@ class SoWebPlotter{
             window.cancelAnimationFrame(this._animationRequest);
         }
         this._animationRequest = null;
+    }
+
+    get camera() {
+        return this._camera;
     }
 
     get renderer() {
