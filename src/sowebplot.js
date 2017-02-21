@@ -417,10 +417,37 @@ class R2toRGraphicsObject extends GraphicsObject {
             "value":    { numComponents: 1, data: [] }
         };
 
+        /*
+            We create a grid of vertices here, and evaluate the function and 
+            numerically approximate the gradient at each point.
+
+            The function is evaluated according to common mathematical 
+            conventions such that the XY plane is the "floor", and Z denotes 
+            the height, that is z = f(x, y).
+
+            For this reason we switch our z and y when we push the coordinates 
+            to the position array, because common graphics convention is XZ as 
+            the floor.
+
+            We could evaluate the function as y = f(x, z) but I don't like to 
+            mix "conceptual domains" unless I have to.
+
+            The coordinates are in world space, so the grid will be at least 
+            |bounds.max[0] - bounds.min[0]| wide in x and so forth.
+        */
+
+        // Todo: remove hard coding.
         const VERTICES_SQRT = 64;
+
+        /*
+            The difference between two vertices in x and y.
+        */
         const X_STEP = Math.abs(bounds.max[0] - bounds.min[0]) / VERTICES_SQRT;
         const Y_STEP = Math.abs(bounds.max[1] - bounds.min[1]) / VERTICES_SQRT;
 
+        /*
+            We move along y then along x, building each vertex and face.
+        */
         for (let y = 0; y < VERTICES_SQRT; y++) {
             let pos_y = bounds.min[1] + Y_STEP * y;
             for (let x = 0; x < VERTICES_SQRT; x++) {
@@ -442,13 +469,19 @@ class R2toRGraphicsObject extends GraphicsObject {
                 geo.position.data.push(...P);
                 geo.normal.data.push(...N);
 
-                // Insert faces.
+                /*
+                    For any vertex except the one at the starting corner, we have
+                    a face to put in the array.
+                */
                 if (y != 0 && x != 0)
                 {
                     let idx0 = ((y    ) * VERTICES_SQRT) + x;
                     let idx1 = ((y - 1) * VERTICES_SQRT) + x;
                     let idx2 = ((y - 1) * VERTICES_SQRT) + (x - 1);
                     let idx3 = ((y    ) * VERTICES_SQRT) + (x - 1);
+                    /*
+                        Care has to be taken so they are inserted counter-clockwise.
+                    */
                     geo.indices.data.push(...[idx3, idx2, idx1, idx1, idx0, idx3])
                 }
             }            
