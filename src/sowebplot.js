@@ -214,6 +214,129 @@ class GraphicsObject {
     cleanUp(gl) {
 
     }
+
+    /**
+     * Tells the renderer that this object is transparent, and needs sort priority.
+     * @returns false
+     */
+     get transparent() { return false; }
+}
+
+class Axes3GraphicsObject extends GraphicsObject {
+    constructor() {
+        super();
+        this._planeProgram = null;
+        this._lineProgram = null;
+        this._planeBuffers = null;
+        this._lineBuffers = null;
+    }
+
+    buildShader(gl) {
+        if (this._planeProgram != null || this._lineProgram)
+            return false;
+        this._planeProgram = twgl.createProgramInfo(
+                gl, 
+                [
+                    // Vertex.
+                    `
+                    attribute vec3  position;
+                    attribute vec3  normal;
+                   
+                    uniform mat4    view;
+                    uniform mat4    model;
+                    uniform mat4    proj;
+
+                    varying vec3    vNormal;
+                    varying vec3    vPosition;
+
+                    void main() {
+                        gl_Position = proj * view * model * vec4(position, 1);
+                        vNormal = normal; vPosition = position;
+                    }`
+                    ,
+                    // Fragment.
+                    `
+                    #extension GL_OES_standard_derivatives : enable
+                    precision mediump float;
+                    
+                    const vec3 COLOUR_MIN = vec3(0.043, 0.475, 0.576);
+                    const vec3 COLOUR_MAX = vec3(0.933, 0.486, 0.047);
+
+                    uniform vec3 boundsMin;
+                    uniform vec3 boundsMax;
+                                        
+                    varying vec3    vNormal;
+                    varying vec3    vPosition;
+                    
+                    void main() { 
+                        vec3 N = normalize(vNormal); 
+                        gl_FragColor = vec4(vec3(0.7), 0.5);
+                    }`
+                ]);
+        this._lineProgram = this._planeProgram;
+        return true;
+    }
+
+    buildBuffers(gl, bounds, qualityOptions) {
+        if (this._planeBuffers != null && this._lineBuffers != null)
+            return false;
+        /*
+            Create our planes, taking care that they go from -0.5 to 0.5.
+        */
+        let mat = twgl.m4.translation(twgl.v3.create());
+        this._planeBuffers = twgl.primitives.createPlaneBufferInfo(gl, 1, 1, 1, 1, mat);
+        /*
+            Create the lines for our axes.
+        */
+        let lineArrays = {
+            position: { numComponents: 3, data: [1, 0, 0, 0, 1, 0, 0, 0, 1]},
+            color:    { numComponents: 3, data: [1, 0, 0, 0, 1, 0, 0, 0, 1]}
+        };
+        //this._lineBuffers = twgl.createBufferInfoFromArrays(lineArrays);
+
+        return true;
+    }
+
+    bindBuffers(gl) {
+        if (this._planeBuffers == null)
+            throw new ReferenceError("bindBuffers called before buildBuffers.");
+        twgl.setBuffersAndAttributes(gl, this._planeProgram, this._planeBuffers);
+    }
+
+    bindShader(gl) {
+        if ((this._planeProgram == null || this._lineProgram == null))
+            throw new ReferenceError("bindShader called before buildShader.");
+        gl.useProgram(this._planeProgram.program);
+    }
+
+    setUniforms(gl, time, viewMat, projMat, bounds) {
+        if ((this._planeProgram == null || this._lineProgram == null))
+            throw new ReferenceError("setUniforms called before buildShader.");
+        
+        let wx = Math.abs(bounds.max[0] - bounds.min[0]);
+        let wz = Math.abs(bounds.max[2] - bounds.min[2]);
+
+        let modelMat = twgl.m4.scaling(twgl.v3.create(wx, 1, wz));
+        twgl.m4.translate(modelMat, twgl.v3.create(wx * 0.5 + bounds.min[0], 0, wz * 0.5 + bounds.min[2]), modelMat);
+        
+        let uniforms = {
+            view: viewMat,
+            model: modelMat,
+            proj: projMat,
+            boundsMin: bounds.min,
+            boundsMax: bounds.max
+        };
+        twgl.setUniforms(this._planeProgram, uniforms);
+    }
+
+    drawBuffers(gl) {
+        if ((this._planeProgram == null || this._lineProgram == null) || this._planeBuffers == null)
+            throw new ReferenceError("buildBuffers or buildShader not called prior to draw call.");
+        //twgl.drawBufferInfo(gl, this._lineBuffers, gl.LINES);
+        twgl.drawBufferInfo(gl, this._planeBuffers);        
+    }
+
+    get transparent() { return true; }
 }
 
 class R2toRGraphicsObject extends GraphicsObject {
@@ -428,6 +551,7 @@ class WebGLRenderer {
         if (!(gfx instanceof GraphicsObject))
             throw new TypeError("Expected instance of GraphicsObject.");
         this._objects.push(gfx);
+        this._objectsInvalidated = true;
     }
 
     unregisterGraphicsObject(def) {
@@ -447,6 +571,7 @@ class WebGLRenderer {
             gfx.buildBuffers(gl, bounds, {});
             gfx.buildShader(gl);
         }
+        this._objectsInvalidated = false;
     }
 
     init() {
@@ -464,7 +589,9 @@ class WebGLRenderer {
         gl.enable(gl.SAMPLE_COVERAGE);
         
         // Assume these things have been touched previously.
-        gl.clearColor(0, 0, 0, 1);
+        gl.clearColor(0, 0, 0, 0);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.frontFace(gl.CCW);
         //gl.disable(gl.CULL_FACE);              
         gl.enable(gl.DEPTH_TEST);
@@ -506,13 +633,13 @@ class SoWebPlotter{
         /*
             Now we create the webgl context, if it isn't around, we die.
         */
-        this._glCtx = this._canvas.getContext("webgl", {depth: true, antialias:true, alpha:true});
+        this._glCtx = this._canvas.getContext("webgl", {depth: true, antialias:true, alpha:false});
         if (this._glCtx == null)
         {
             /*
                 Try with experimental instead.
             */
-            this._glCtx = this._canvas.getContext("experimental-webgl", {depth: true, antialias: true, alpha:true});
+            this._glCtx = this._canvas.getContext("experimental-webgl", {depth: true, antialias: true, alpha:false});
             if (this._glCtx == null)
                 throw new Error("WebGL not supported.");
         }

@@ -23,8 +23,10 @@
                 
                 let gfx1 = new R2toRGraphicsObject(plot1);
                 let gfx2 = new R2toRGraphicsObject(plot2);
+                let axes = new Axes3GraphicsObject();
                 plotter.renderer.registerGraphicsObject(gfx1);
-                plotter.renderer.registerGraphicsObject(gfx2);
+                plotter.renderer.registerGraphicsObject(axes);
+                //plotter.renderer.registerGraphicsObject(gfx2);
 
                 plotter.loop();
             });            
