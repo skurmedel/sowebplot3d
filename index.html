@@ -17,8 +17,8 @@
                 plotter.camera.setPosition(1,1,1);
                 plotter.camera.setTarget(0,0,0);
                 var gl = plotter.webgl;
-
-                let plot1 = new R2toRPlot(new RealValuedFunction(["x", "y"], "Math.cos(5 * x) * 2 - Math.sin(3 * y)"));
+                
+                let plot1 = new R2toRPlot(new RealValuedFunction(["x", "y"], "Math.cos(5*x*x) + Math.sin(5*y*y)"));
                 let plot2 = new R2toRPlot(new RealValuedFunction(["x", "y"], "Math.cos(2 * x) * 2 - Math.sin(5 * y)"));
                 
                 let gfx1 = new R2toRGraphicsObject(plot1);
@@ -29,6 +29,13 @@
                 //plotter.renderer.registerGraphicsObject(gfx2);
 
                 plotter.loop();
+
+                function rotate(t) {
+                    plotter.camera.setPosition(Math.cos(1.0/Math.PI / 1000.0 * t), 1, Math.sin(1.0/Math.PI / 1000.0 * t));
+                    plotter.camera.setTarget(0, 0, 0);
+                    requestAnimationFrame(rotate);
+                }
+                requestAnimationFrame(rotate);                       
             });            
         </script>
     </body>
