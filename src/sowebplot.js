@@ -165,46 +165,16 @@ class GraphicsObject {
     }
 
     /**
-     * Bind the buffers created in buildBuffers.
-     * 
-     * If buildBuffers was not called, this should throw an error!
-     * 
-     * @param gl The WebGL context.
-     */
-    bindBuffers(gl) {
-        throw new Error("I'm not implemented.");
-    }
-
-    /**
-     * Binds the shader created in buildShader.
-     * 
-     * If buildShader was not called, this should throw an error!
-     * 
-     * @param gl The WebGL context.
-     */
-    bindShader(gl) {
-        throw new Error("I'm not implemented.");
-    }
-
-    /**
-     * Set the uniforms needed by the shader.
+     * Draw the object.
      * 
      * @param gl        The WebGL context.
      * @param viewMat   view transform matrix.
      * @param projMat   projection transform matrix.
      * @param time      Time since last render.
      * @param bounds    Holds the min and max bounds, for example bounds.min[2] for minimum z.
-     */
-    setUniforms(gl, time, viewMat, projMat, bounds) {
-        throw new Error("I'm not implemented.");
-    }
-
-    /**
-     * Called last, should draw the buffers.
-     * 
      * @returns true if drawn, false otherwise.
      */
-    drawBuffers(gl) {
+    draw(gl, time, viewMat, projMat, bounds) {
         throw new Error("I'm not implemented.");
     }
 
@@ -225,16 +195,16 @@ class GraphicsObject {
 class Axes3GraphicsObject extends GraphicsObject {
     constructor() {
         super();
-        this._planeProgram = null;
+        this._cubeProgram = null;
         this._lineProgram = null;
-        this._planeBuffers = null;
+        this._cubeBuffers = null;
         this._lineBuffers = null;
     }
 
     buildShader(gl) {
-        if (this._planeProgram != null || this._lineProgram)
+        if (this._cubeProgram != null || this._lineProgram)
             return false;
-        this._planeProgram = twgl.createProgramInfo(
+        this._cubeProgram = twgl.createProgramInfo(
                 gl, 
                 [
                     // Vertex.
@@ -246,12 +216,11 @@ class Axes3GraphicsObject extends GraphicsObject {
                     uniform mat4    model;
                     uniform mat4    proj;
 
-                    varying vec3    vNormal;
                     varying vec3    vPosition;
 
                     void main() {
                         gl_Position = proj * view * model * vec4(position, 1);
-                        vNormal = normal; vPosition = position;
+                        vPosition = position;
                     }`
                     ,
                     // Fragment.
@@ -259,81 +228,113 @@ class Axes3GraphicsObject extends GraphicsObject {
                     #extension GL_OES_standard_derivatives : enable
                     precision mediump float;
                     
-                    const vec3 COLOUR_MIN = vec3(0.043, 0.475, 0.576);
-                    const vec3 COLOUR_MAX = vec3(0.933, 0.486, 0.047);
-
                     uniform vec3 boundsMin;
                     uniform vec3 boundsMax;
-                                        
-                    varying vec3    vNormal;
+
                     varying vec3    vPosition;
                     
                     void main() { 
-                        vec3 N = normalize(vNormal); 
-                        gl_FragColor = vec4(vec3(0.7), 0.5);
+                        float fw = fwidth(vPosition.y);
+                        float line = step(fw, mod(vPosition.y, 0.25));
+                        gl_FragColor = vec4(vec3(1), 0.5*line);
                     }`
                 ]);
-        this._lineProgram = this._planeProgram;
+        this._lineProgram = twgl.createProgramInfo(
+                gl, 
+                [
+                    // Vertex.
+                    `
+                    attribute vec3  position;
+                    attribute vec3  color;
+
+                    uniform mat4    view;
+                    uniform mat4    model;
+                    uniform mat4    proj;
+
+                    varying vec3    vColor;
+
+                    void main() {
+                        gl_Position = proj * view * model * vec4(position, 1);
+                        vColor = color;
+                    }`
+                    ,
+                    // Fragment.
+                    `
+                    precision mediump float;
+                                        
+                    varying vec3    vColor;
+                    
+                    void main() { 
+                        gl_FragColor = vec4(vColor, 0.75);
+                    }`
+                ]);
         return true;
     }
 
     buildBuffers(gl, bounds, qualityOptions) {
-        if (this._planeBuffers != null && this._lineBuffers != null)
+        if (this._cubeBuffers != null && this._lineBuffers != null)
             return false;
         /*
-            Create our planes, taking care that they go from -0.5 to 0.5.
+            Create our cube, taking care that it is bounded from -0.5 to 0.5.
         */
-        let mat = twgl.m4.translation(twgl.v3.create());
-        this._planeBuffers = twgl.primitives.createPlaneBufferInfo(gl, 1, 1, 1, 1, mat);
+        let cubeGeo = twgl.primitives.createCubeVertices(1);
+        this._cubeBuffers = twgl.createBufferInfoFromArrays(gl, cubeGeo);
         /*
             Create the lines for our axes.
         */
-        let lineArrays = {
-            position: { numComponents: 3, data: [1, 0, 0, 0, 1, 0, 0, 0, 1]},
-            color:    { numComponents: 3, data: [1, 0, 0, 0, 1, 0, 0, 0, 1]}
+        let lineGeo = {
+            "indices":  { numComponents: 3, data: [0, 1,  0, 2,  0, 3]},
+            "position": { numComponents: 3, data: [0, 0, 0,  0, 0.5, 0,   0.5, 0, 0,   0, 0, 0.5]},
+            "color": { numComponents: 3, data: [1, 1, 1,  1, 0, 0,  0, 1, 0,  0, 0, 1]}
         };
-        //this._lineBuffers = twgl.createBufferInfoFromArrays(lineArrays);
+        this._lineBuffers = twgl.createBufferInfoFromArrays(gl, lineGeo);
 
         return true;
     }
 
-    bindBuffers(gl) {
-        if (this._planeBuffers == null)
-            throw new ReferenceError("bindBuffers called before buildBuffers.");
-        twgl.setBuffersAndAttributes(gl, this._planeProgram, this._planeBuffers);
-    }
-
-    bindShader(gl) {
-        if ((this._planeProgram == null || this._lineProgram == null))
-            throw new ReferenceError("bindShader called before buildShader.");
-        gl.useProgram(this._planeProgram.program);
-    }
-
-    setUniforms(gl, time, viewMat, projMat, bounds) {
-        if ((this._planeProgram == null || this._lineProgram == null))
-            throw new ReferenceError("setUniforms called before buildShader.");
+    draw(gl, time, viewMat, projMat, bounds) {
+        if ((this._cubeProgram == null || this._lineProgram == null) || (this._cubeBuffers == null || this._lineBuffers == null))
+            throw new ReferenceError("buildBuffers or buildShader not called prior to draw call.");
         
         let wx = Math.abs(bounds.max[0] - bounds.min[0]);
+        let wy = Math.abs(bounds.max[1] - bounds.min[1]);
         let wz = Math.abs(bounds.max[2] - bounds.min[2]);
 
-        let modelMat = twgl.m4.scaling(twgl.v3.create(wx, 1, wz));
-        twgl.m4.translate(modelMat, twgl.v3.create(wx * 0.5 + bounds.min[0], 0, wz * 0.5 + bounds.min[2]), modelMat);
-        
-        let uniforms = {
-            view: viewMat,
-            model: modelMat,
-            proj: projMat,
-            boundsMin: bounds.min,
-            boundsMax: bounds.max
-        };
-        twgl.setUniforms(this._planeProgram, uniforms);
-    }
+        let modelMat = twgl.m4.scaling([wx, wy, wz]);
+        twgl.m4.translate(modelMat, [wx * 0.5 + bounds.min[0], wy * 0.5 + bounds.min[1], wz * 0.5 + bounds.min[2]], modelMat);
+                
+        function drawLines(me) {
+            let uniforms = {
+                view: viewMat,
+                model: modelMat,
+                proj: projMat
+            };
+            gl.useProgram(me._lineProgram.program);
+            twgl.setBuffersAndAttributes(gl, me._lineProgram, me._lineBuffers);
+            twgl.setUniforms(me._lineProgram, uniforms);        
+            twgl.drawBufferInfo(gl, me._lineBuffers, gl.LINES);
+        }
 
-    drawBuffers(gl) {
-        if ((this._planeProgram == null || this._lineProgram == null) || this._planeBuffers == null)
-            throw new ReferenceError("buildBuffers or buildShader not called prior to draw call.");
-        //twgl.drawBufferInfo(gl, this._lineBuffers, gl.LINES);
-        twgl.drawBufferInfo(gl, this._planeBuffers);        
+        function drawPlane(me) {
+            let uniforms = {
+                view: viewMat,
+                model: modelMat,
+                proj: projMat,
+                boundsMin: bounds.min,
+                boundsMax: bounds.max
+            };
+            gl.useProgram(me._cubeProgram.program);
+            gl.enable(gl.CULL_FACE);
+            gl.frontFace(gl.CCW);
+            gl.cullFace(gl.FRONT);
+            twgl.setBuffersAndAttributes(gl, me._cubeProgram, me._cubeBuffers);        
+            twgl.setUniforms(me._cubeProgram, uniforms);
+            twgl.drawBufferInfo(gl, me._cubeBuffers);    
+            gl.disable(gl.CULL_FACE);
+            
+        }
+        drawPlane(this);
+        drawLines(this);
     }
 
     get transparent() { return true; }
@@ -457,21 +458,10 @@ class R2toRGraphicsObject extends GraphicsObject {
         return true;
     }
 
-    bindBuffers(gl) {
-        if (this._buffers == null)
-            throw new ReferenceError("bindBuffers called before buildBuffers.");
-        twgl.setBuffersAndAttributes(gl, this._program, this._buffers);
-    }
+    draw(gl, time, viewMat, projMat, bounds) {
+        if (this._program == null || this._buffers == null)
+            throw new ReferenceError("buildBuffers or buildShader not called prior to draw call.");
 
-    bindShader(gl) {
-        if (this._program == null)
-            throw new ReferenceError("bindShader called before buildShader.");
-        gl.useProgram(this._program.program);
-    }
-
-    setUniforms(gl, time, viewMat, projMat, bounds) {
-        if (this._program == null)
-            throw new ReferenceError("setUniforms called before buildShader.");
         let uniforms = {
             view: viewMat,
             model: twgl.m4.identity(),
@@ -479,12 +469,9 @@ class R2toRGraphicsObject extends GraphicsObject {
             boundsMin: bounds.min,
             boundsMax: bounds.max
         };
+        gl.useProgram(this._program.program);
         twgl.setUniforms(this._program, uniforms);
-    }
-
-    drawBuffers(gl) {
-        if (this._program == null || this._buffers == null)
-            throw new ReferenceError("buildBuffers or buildShader not called prior to draw call.");
+        twgl.setBuffersAndAttributes(gl, this._program, this._buffers);
         twgl.drawBufferInfo(gl, this._buffers);
     }
 }
@@ -586,7 +573,7 @@ class WebGLRenderer {
             this._objectsInvalidated = false;
         }
 
-        gl.enable(gl.SAMPLE_COVERAGE);
+        //gl.enable(gl.SAMPLE_COVERAGE);
         
         // Assume these things have been touched previously.
         gl.clearColor(0, 0, 0, 0);
@@ -603,10 +590,7 @@ class WebGLRenderer {
 
         for (let gfx of this._objects)
         {
-            gfx.bindShader(gl);
-            gfx.bindBuffers(gl);
-            gfx.setUniforms(gl, time, camera.getViewMatrix(time), camera.getProjMatrix(time), bounds);
-            gfx.drawBuffers(gl);
+            gfx.draw(gl, time, camera.getViewMatrix(time), camera.getProjMatrix(time), bounds);
         }
     }
 
@@ -666,8 +650,8 @@ class SoWebPlotter{
             return;
         
         let bounds = {
-            "min": twgl.v3.create(-1.5, -1.5, -1.5),
-            "max": twgl.v3.create( 1.5,  1.5,  1.5)
+            "min": twgl.v3.create(-1.25, -1.25, -1.25),
+            "max": twgl.v3.create( 1.25,  1.25,  1.25)
         };
 
         let me = this;
