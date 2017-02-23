@@ -451,6 +451,12 @@ class R2toRGraphicsObject extends GraphicsObject {
         const X_STEP = Math.abs(bounds.max[0] - bounds.min[0]) / VERTICES_SQRT;
         const Y_STEP = Math.abs(bounds.max[1] - bounds.min[1]) / VERTICES_SQRT;
 
+        /*
+            An array that holds true or false for every generated vertex.
+
+            isdefined[index] tells us whether a PREVIOUS vertex wasn't well 
+            defined, that is, the function has a singularity or similar there.
+        */
         let isdefined = [];
 
         /*
@@ -470,11 +476,14 @@ class R2toRGraphicsObject extends GraphicsObject {
 
                 /*
                     Now we have to make sure vertices where our function isn't well
-                    behaved gets removed. Also the surrounding vertices will need
-                    to know this for polygon creation.
+                    behaved gets some values. It will be sent to the GPU, but
+                    polygons for it won't be generated. This wastes some memory,
+                    hopefully we'll fix this in the future ;)
                 */
                 if (pos_z == undefined || grad == undefined)
                 {
+                    // The surrounding vertices will need to know this for 
+                    // polygon creation.
                     isdefined.push(false);
                     geo.value.data.push(previous_z);
                     geo.position.data.push(...[pos_x, pos_z, 0]);
@@ -510,10 +519,15 @@ class R2toRGraphicsObject extends GraphicsObject {
                     let idx2 = ((y - 1) * VERTICES_SQRT) + (x - 1);
                     let idx3 = ((y    ) * VERTICES_SQRT) + (x - 1);
 
+                    /*
+                        These are the cases for when one or all of the surrounding
+                        vertices are for undefined function values.
+                    */
                     let cases = [
                         !isdefined[idx1] &&  isdefined[idx2] &&  isdefined[idx3],
                          isdefined[idx1] && !isdefined[idx2] &&  isdefined[idx3],
-                         isdefined[idx1] &&  isdefined[idx2] && !isdefined[idx3]
+                         isdefined[idx1] &&  isdefined[idx2] && !isdefined[idx3],
+                        !isdefined[idx1] && !isdefined[idx2] && !isdefined[idx3]
                     ];
 
                     let idxs = [];
@@ -523,15 +537,15 @@ class R2toRGraphicsObject extends GraphicsObject {
                         idxs = [idx0, idx3, idx1];
                     else if (cases[2])
                         idxs = [idx0, idx2, idx1];
+                    // All the surrounding vertices for undefined vertices, so we
+                    // omit all polygons.
+                    else if (cases[3])
+                        continue;
+                    // All the vertices are for defined values, so we can generate
+                    // the triangles for the whole quad.
                     else
                         idxs = [idx0, idx2, idx1, idx0, idx3, idx2];
-
-
-                    /*if (!isdefined[idx1] || !isdefined[idx2] || !isdefined[idx3])
-                        continue;
-                    /*
-                        Care has to be taken so they are inserted counter-clockwise.
-                    */
+                    
                     geo.indices.data.push(...idxs);
                 }
             }            
