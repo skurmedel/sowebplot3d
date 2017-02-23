@@ -72,7 +72,7 @@ class RealValuedFunction {
      */
     evalAt(...coords) {
         let v = this.func(...coords);
-        if (v === Infinity) return undefined;
+        if (v === Infinity || isNaN(v)) return undefined;
         return v;
     }
 
@@ -92,11 +92,13 @@ class RealValuedFunction {
             let p = new Array(...origin);
             p[k] = coords[k];
             let v1 = this.evalAt(...p);
-            if (v1 === undefined) return undefined;
             p[k] += delta;
             let v2 = this.evalAt(...p);
-            if (v2 === undefined) return undefined;
             grad[k] = (v2 - v1) / delta;
+        }
+        for (let gi of grad) {
+            if (isNaN(gi))
+                return undefined;
         }
         return new RealVector(...grad);
     }
@@ -449,29 +451,53 @@ class R2toRGraphicsObject extends GraphicsObject {
         const X_STEP = Math.abs(bounds.max[0] - bounds.min[0]) / VERTICES_SQRT;
         const Y_STEP = Math.abs(bounds.max[1] - bounds.min[1]) / VERTICES_SQRT;
 
+        let isdefined = [];
+
         /*
             We move along y then along x, building each vertex and face.
         */
+        let previous_z = 0;
         for (let y = 0; y < VERTICES_SQRT; y++) {
             let pos_y = bounds.min[1] + Y_STEP * y;
             for (let x = 0; x < VERTICES_SQRT; x++) {
                 let pos_x = bounds.min[0] + X_STEP * x;
-                let pos_z = this._def.fn.evalAt(pos_x, pos_y);
-                
-                geo.value.data.push(pos_z);
 
+                /*
+                    Calculate the z value and the gradient at (x,y).
+                */
+                let pos_z = this._def.fn.evalAt(pos_x, pos_y);               
                 let grad = this._def.fn.gradientAt(pos_x, pos_y);
-                let N = [grad.at(0), grad.at(1), -1];
-                let N_norm = 1.0/Math.sqrt(N[0]*N[0] + N[1]*N[1] + 1);
-                N[0] *= N_norm;
-                N[1] *= N_norm;
-                N[2] *= N_norm;
-            
-                // Note we switch z and y here, to better accomodate for OpenGL conventions.
-                let P = [pos_x, pos_z, pos_y];
 
-                geo.position.data.push(...P);
-                geo.normal.data.push(...N);
+                /*
+                    Now we have to make sure vertices where our function isn't well
+                    behaved gets removed. Also the surrounding vertices will need
+                    to know this for polygon creation.
+                */
+                if (pos_z == undefined || grad == undefined)
+                {
+                    isdefined.push(false);
+                    geo.value.data.push(previous_z);
+                    geo.position.data.push(...[pos_x, pos_z, 0]);
+                    geo.normal.data.push(...[0, 1, 0]);
+                    continue;
+                } else {
+                    previous_z = pos_z;
+                    isdefined.push(true);
+                    
+                    geo.value.data.push(pos_z);
+
+                    let N = [grad.at(0), grad.at(1), -1];
+                    let N_norm = 1.0/Math.sqrt(N[0]*N[0] + N[1]*N[1] + 1);
+                    N[0] *= N_norm;
+                    N[1] *= N_norm;
+                    N[2] *= N_norm;
+                
+                    // Note we switch z and y here, to better accomodate for OpenGL conventions.
+                    let P = [pos_x, pos_z, pos_y];
+
+                    geo.position.data.push(...P);
+                    geo.normal.data.push(...N);
+                }
 
                 /*
                     For any vertex except the one at the starting corner, we have
@@ -483,10 +509,30 @@ class R2toRGraphicsObject extends GraphicsObject {
                     let idx1 = ((y - 1) * VERTICES_SQRT) + x;
                     let idx2 = ((y - 1) * VERTICES_SQRT) + (x - 1);
                     let idx3 = ((y    ) * VERTICES_SQRT) + (x - 1);
+
+                    let cases = [
+                        !isdefined[idx1] &&  isdefined[idx2] &&  isdefined[idx3],
+                         isdefined[idx1] && !isdefined[idx2] &&  isdefined[idx3],
+                         isdefined[idx1] &&  isdefined[idx2] && !isdefined[idx3]
+                    ];
+
+                    let idxs = [];
+                    if (cases[0])
+                        idxs = [idx0, idx3, idx2];
+                    else if (cases[1])
+                        idxs = [idx0, idx3, idx1];
+                    else if (cases[2])
+                        idxs = [idx0, idx2, idx1];
+                    else
+                        idxs = [idx0, idx2, idx1, idx0, idx3, idx2];
+
+
+                    /*if (!isdefined[idx1] || !isdefined[idx2] || !isdefined[idx3])
+                        continue;
                     /*
                         Care has to be taken so they are inserted counter-clockwise.
                     */
-                    geo.indices.data.push(...[idx3, idx2, idx1, idx1, idx0, idx3])
+                    geo.indices.data.push(...idxs);
                 }
             }            
         }
