@@ -52,9 +52,9 @@ describe("RealValuedFunction", function () {
             expect(f.evalAt(2, 2)).to.be(4);
         });
 
-        it("should return infinity for 1/0", function() {
+        it("should return undefined for 1/0", function() {
             let f = new RVF(["u"], "1/u");
-            expect(f.evalAt(0)).to.be(Infinity);
+            expect(f.evalAt(0)).to.be(undefined);
         });
 
     });
@@ -69,6 +69,13 @@ describe("RealValuedFunction", function () {
             expect(Math.abs(v.at(0) - 2) < 0.00001).to.be.ok();
             expect(Math.abs(v.at(1) - 2) < 0.00001).to.be.ok();
             expect(Math.abs(v.at(2) - 4) < 0.00001).to.be.ok();
+        });
+
+        it("should return undefined when infinity is reached", function() {
+            let f = new RVF(["x", "y"], "2x + 1/y");
+            let v = f.gradientAt(1,0);
+
+            expect(v).to.be(undefined);
         });
 
         it("should fail if the params are more or less than the definition.", function() {
