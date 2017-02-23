@@ -72,7 +72,7 @@ describe("RealValuedFunction", function () {
         });
 
         it("should return undefined when infinity is reached", function() {
-            let f = new RVF(["x", "y"], "2x + 1/y");
+            let f = new RVF(["x", "y"], "2*x + 1/y");
             let v = f.gradientAt(1,0);
 
             expect(v).to.be(undefined);
