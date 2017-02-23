@@ -93,7 +93,7 @@ class RealValuedFunction {
             // We use central difference here, so -delta to +delta.
             p[k] = coords[k] - delta;
             let v1 = this.evalAt(...p);
-            p[k] += 2 * delta;
+            p[k] = coords[k] + delta;
             let v2 = this.evalAt(...p);
             grad[k] = (v2 - v1) / (2 * delta);
         }
@@ -406,7 +406,9 @@ class R2toRGraphicsObject extends GraphicsObject {
                         float yderiv = fwidth(vPosition.y);
                         float ymod =  mod(vPosition.y, 0.25);
                         if (vPosition.y < boundsMin.y || vPosition.y > boundsMax.y) discard; 
-                        gl_FragColor = vec4(mix(0.2, 1.0, abs(dot(N, I))) * mix(COLOUR_MIN, COLOUR_MAX, vValue) * step(yderiv, ymod), 1);
+                        vec3 normalColor = (N * 0.5 + vec3(0.5)) * 0.3;
+                        vec3 valueColor  = mix(COLOUR_MIN, COLOUR_MAX, vValue) * 0.7;
+                        gl_FragColor = vec4((normalColor + valueColor) * step(yderiv, ymod), 1);
                     }`
                 ]);
         return true;
@@ -496,14 +498,13 @@ class R2toRGraphicsObject extends GraphicsObject {
                     
                     geo.value.data.push(pos_z);
 
-                    let N = [grad.at(0), grad.at(1), -1];
-                    let N_norm = 1.0/Math.sqrt(N[0]*N[0] + N[1]*N[1] + 1);
-                    N[0] *= N_norm;
-                    N[1] *= N_norm;
-                    N[2] *= N_norm;
-                
                     // Note we switch z and y here, to better accomodate for OpenGL conventions.
                     let P = [pos_x, pos_z, pos_y];
+                    let N = [grad.at(0), -1, grad.at(1)];
+                    let N_norm = 1.0/Math.sqrt(N[0]*N[0] + N[2]*N[2] + 1);
+                    N[0] *= N_norm;
+                    N[1] *= N_norm;
+                    N[2] *= N_norm;                
 
                     geo.position.data.push(...P);
                     geo.normal.data.push(...N);
