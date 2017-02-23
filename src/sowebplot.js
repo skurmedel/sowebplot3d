@@ -71,7 +71,9 @@ class RealValuedFunction {
      * Evaluate the function at the given coordinates.
      */
     evalAt(...coords) {
-        return this.func(...coords);
+        let v = this.func(...coords);
+        if (v === Infinity) return undefined;
+        return v;
     }
 
     /**
@@ -90,8 +92,10 @@ class RealValuedFunction {
             let p = new Array(...origin);
             p[k] = coords[k];
             let v1 = this.evalAt(...p);
+            if (v1 === undefined) return undefined;
             p[k] += delta;
             let v2 = this.evalAt(...p);
+            if (v2 === undefined) return undefined;
             grad[k] = (v2 - v1) / delta;
         }
         return new RealVector(...grad);
