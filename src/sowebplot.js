@@ -90,11 +90,12 @@ class RealValuedFunction {
         const origin = new Array(this.vars.length).fill(0, 0, this.vars.length);
         for (let k = 0; k < origin.length; k++) {
             let p = new Array(...origin);
-            p[k] = coords[k];
+            // We use central difference here, so -delta to +delta.
+            p[k] = coords[k] - delta;
             let v1 = this.evalAt(...p);
-            p[k] += delta;
+            p[k] += 2 * delta;
             let v2 = this.evalAt(...p);
-            grad[k] = (v2 - v1) / delta;
+            grad[k] = (v2 - v1) / (2 * delta);
         }
         for (let gi of grad) {
             if (isNaN(gi))
