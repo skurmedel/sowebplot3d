@@ -291,7 +291,7 @@ class Axes3GraphicsObject extends GraphicsObject {
         let lineGeo = {
             "indices":  { numComponents: 3, data: [0, 1,  0, 2,  0, 3]},
             "position": { numComponents: 3, data: [0, 0, 0,  0, 0.5, 0,   0.5, 0, 0,   0, 0, 0.5]},
-            "color": { numComponents: 3, data: [1, 1, 1,  1, 0, 0,  0, 1, 0,  0, 0, 1]}
+            "color": { numComponents: 3, data: [1, 1, 1,  0, 1, 0,  1, 0, 0,  0, 0, 1]}
         };
         this._lineBuffers = twgl.createBufferInfoFromArrays(gl, lineGeo);
 
