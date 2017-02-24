@@ -175,13 +175,12 @@ class GraphicsObject {
      * Draw the object.
      * 
      * @param gl        The WebGL context.
-     * @param viewMat   view transform matrix.
-     * @param projMat   projection transform matrix.
+     * @param camera    The camera object.
      * @param time      Time since last render.
      * @param bounds    Holds the min and max bounds, for example bounds.min[2] for minimum z.
      * @returns true if drawn, false otherwise.
      */
-    draw(gl, time, viewMat, projMat, bounds) {
+    draw(gl, time, camera, bounds) {
         throw new Error("I'm not implemented.");
     }
 
@@ -299,7 +298,7 @@ class Axes3GraphicsObject extends GraphicsObject {
         return true;
     }
 
-    draw(gl, time, viewMat, projMat, bounds) {
+    draw(gl, time, camera, bounds) {
         if ((this._cubeProgram == null || this._lineProgram == null) || (this._cubeBuffers == null || this._lineBuffers == null))
             throw new ReferenceError("buildBuffers or buildShader not called prior to draw call.");
         
@@ -312,9 +311,9 @@ class Axes3GraphicsObject extends GraphicsObject {
                 
         function drawLines(me) {
             let uniforms = {
-                view: viewMat,
+                view: camera.getViewMatrix(time),
                 model: modelMat,
-                proj: projMat
+                proj: camera.getProjectionMatrix(time)
             };
             gl.useProgram(me._lineProgram.program);
             twgl.setBuffersAndAttributes(gl, me._lineProgram, me._lineBuffers);
@@ -324,9 +323,9 @@ class Axes3GraphicsObject extends GraphicsObject {
 
         function drawPlane(me) {
             let uniforms = {
-                view: viewMat,
+                view: camera.getViewMatrix(time),
                 model: modelMat,
-                proj: projMat,
+                proj: camera.getProjectionMatrix(time),
                 boundsMin: bounds.min,
                 boundsMax: bounds.max
             };
@@ -373,15 +372,13 @@ class R2toRGraphicsObject extends GraphicsObject {
                     uniform mat4    model;
                     uniform mat4    proj;
 
-                    varying vec3    vNormal;
-                    varying vec3    vPosition;
+                    varying vec3    vWNormal;
+                    varying vec3    vWPosition;
                     varying float   vValue;
-                    varying vec3    vEye;
 
                     void main() {
-                        vEye = (view * model * vec4(0, 0, -1, 1)).xyz;
                         gl_Position = proj * view * model * vec4(position, 1);
-                        vNormal = normal; vPosition = position; vValue = value;
+                        vWNormal = normal; vWPosition = position; vValue = value;
                     }`
                     ,
                     // Fragment.
@@ -394,20 +391,30 @@ class R2toRGraphicsObject extends GraphicsObject {
 
                     uniform vec3 boundsMin;
                     uniform vec3 boundsMax;
+                    uniform vec3 eye;
                                         
-                    varying vec3    vNormal;
-                    varying vec3    vPosition;
+                    varying vec3    vWNormal;
+                    varying vec3    vWPosition;
                     varying float   vValue;
-                    varying vec3    vEye;
+
+                    vec3 color(float t) {
+                        return vec3(
+                            0.043 + 1.438 * t - 1.548 * t * t + t * t * t,
+                            0.475 + 0.589 * t - 1.578 * t * t + t * t * t,
+                            0.576 + 0.725 * t - 2.254 * t * t + t * t * t
+                        );
+                    }
                     
                     void main() { 
-                        vec3 N = normalize(vNormal); vec3 I = normalize(vEye);
+                        vec3 N = normalize(vWNormal); 
+                        vec3 I = normalize(eye-vWPosition);
                         float ywidth = abs(boundsMax.y - boundsMin.y);
-                        float yderiv = fwidth(vPosition.y);
-                        float ymod =  mod(vPosition.y, 0.25);
-                        if (vPosition.y < boundsMin.y || vPosition.y > boundsMax.y) discard; 
+                        float yderiv = fwidth(vWPosition.y);
+                        float ymod =  mod(vWPosition.y, 0.25);
+                        if (vWPosition.y < boundsMin.y || vWPosition.y > boundsMax.y) discard; 
                         vec3 normalColor = (N * 0.5 + vec3(0.5)) * 0.3;
-                        vec3 valueColor  = mix(COLOUR_MIN, COLOUR_MAX, vValue) * 0.7;
+                        //vec3 valueColor  = pow(mix(0.1, 1.0, max(dot(I, -N), 0.0)), 0.3) * color(clamp(vValue, 0.0, 1.0)) * 0.7;
+                        vec3 valueColor  = pow(mix(0.1, 1.0, max(dot(I, -N), 0.0)), 0.3) * mix(COLOUR_MIN, COLOUR_MAX, vValue) * 0.7;
                         gl_FragColor = vec4((normalColor + valueColor) * step(yderiv, ymod), 1);
                     }`
                 ]);
@@ -557,14 +564,15 @@ class R2toRGraphicsObject extends GraphicsObject {
         return true;
     }
 
-    draw(gl, time, viewMat, projMat, bounds) {
+    draw(gl, time, camera, bounds) {
         if (this._program == null || this._buffers == null)
             throw new ReferenceError("buildBuffers or buildShader not called prior to draw call.");
 
         let uniforms = {
-            view: viewMat,
+            view: camera.getViewMatrix(time),
             model: twgl.m4.identity(),
-            proj: projMat,
+            proj: camera.getProjectionMatrix(time),
+            eye: camera.position,
             boundsMin: bounds.min,
             boundsMax: bounds.max
         };
@@ -599,6 +607,10 @@ class OrthographicCamera {
         return this;
     }
 
+    get position() {
+        return this._pos;
+    }
+
     /**
      * Gets the camera's view matrix, transforms world space to camera space.
      * 
@@ -619,7 +631,7 @@ class OrthographicCamera {
      * @param time The time passed since the last render.
      * @returns A twgl.m4 instance.
      */
-    getProjMatrix(time) {
+    getProjectionMatrix(time) {
         return this._projMatrix;
     }
 }
@@ -689,7 +701,7 @@ class WebGLRenderer {
 
         for (let gfx of this._objects)
         {
-            gfx.draw(gl, time, camera.getViewMatrix(time), camera.getProjMatrix(time), bounds);
+            gfx.draw(gl, time, camera, bounds);
         }
     }
 
